@@ -2,7 +2,7 @@ import * as mm from '@magenta/music';
 import { sampler } from './samplers'
 import Tone from 'tone'
 
-const loop = ()=>{
+const loop = (drawCallback)=>{
 
           // Number of steps to play each chord.
           const STEPS_PER_QUARTER = 2;
@@ -67,14 +67,12 @@ const loop = ()=>{
                 // Set total sequence length.
                 contSeq.totalQuantizedSteps = STEPS_PER_PROG;
                 seq = contSeq;
-                // console.log(seq);
               }
 
 
           // Sample over chord progression.
           const generate = () => {
 
-            // Prime with root note of the first chord.
             console.log("model start co generate")
             fetch('http://localhost:3001/')
                 .then(response => response.json())
@@ -84,7 +82,6 @@ const loop = ()=>{
                     note.quantizedStartStep = parseInt(note.quantizedStartStep);
                     note.quantizedEndStep = parseInt(note.quantizedEndStep);
                   })
-                  console.log(data);
                   updateSeq(data);
                 });
 
@@ -107,22 +104,25 @@ const loop = ()=>{
 
             seq.notes.filter((note) => note.quantizedStartStep === currentStep)
                      .forEach((note) => {
-                       console.log(note);
+                       Tone.Draw.schedule(() =>{
+                         drawCallback(note);
+                       }, time);
                        let freq = Tone.Frequency(note.pitch, 'midi');
                        let duration = (note.quantizedEndStep  - note.quantizedStartStep)  / STEPS_PER_SECOND;
                        sampler.triggerAttackRelease(freq, duration);
                      })
           }
+          Tone.Transport.scheduleRepeat(playSeq, "8n");
+          Tone.Transport.start();
 
-          model.initialize().then(()=>{
-            // Tone.Transport.scheduleRepeat((time)=>{
-            //   var anticipateGenerator = Tone.Draw.schedule(generate, time);
-            //   anticipateGenerator.anticipation = 5;
-            // }, STEPS_PER_PROG/STEPS_PER_SECOND);
-
-            Tone.Transport.scheduleRepeat(playSeq, "8n");
-            Tone.Transport.start();
-          });
+          // model.initialize().then(()=>{
+          //   // Tone.Transport.scheduleRepeat((time)=>{
+          //   //   var anticipateGenerator = Tone.Draw.schedule(generate, time);
+          //   //   anticipateGenerator.anticipation = 5;
+          //   // }, STEPS_PER_PROG/STEPS_PER_SECOND);
+          //
+          //
+          // });
 }
 
 export default loop;
