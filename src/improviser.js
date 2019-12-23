@@ -8,6 +8,7 @@ const loop = ()=>{
           const STEPS_PER_QUARTER = 2;
           const CHORDS_PER_BAR = 1/2;
           const STEPS_PER_CHORD = STEPS_PER_QUARTER * 4 / CHORDS_PER_BAR;
+          const STEPS_PER_SECOND = Tone.Transport.bpm.value * STEPS_PER_QUARTER / 60;
 
 
           // Number of times to repeat chord progression.
@@ -24,16 +25,21 @@ const loop = ()=>{
           // Current chords being played.
           var chords = ["C", "Am", "F", "G"];
           const STEPS_PER_PROG = chords.length * STEPS_PER_CHORD;
-          var seq;
+          var seq = {
+            quantizationInfo: {stepsPerQuarter: STEPS_PER_QUARTER},
+            notes: [],
+            totalQuantizedSteps: 1
+          };
 
           const updateSeq = (contSeq) => {
 
                 // Add the continuation to the original.
+                console.log("updating");
                 contSeq.notes.forEach((note) => {
-                  note.quantizedStartStep += 1;
-                  note.quantizedEndStep += 1;
+                  note.quantizedStartStep += seq.totalQuantizedSteps % STEPS_PER_PROG;
+                  note.quantizedEndStep += seq.totalQuantizedSteps % STEPS_PER_PROG;
                   note.instrument = 0;
-                  seq.notes.push(note);
+                  //seq.notes.push(note);
                 });
 
 
@@ -42,22 +48,20 @@ const loop = ()=>{
                   chords.forEach((chord, j)=>{
                     // Add bass
                     const root = mm.chords.ChordSymbols.root(chord);
-                    seq.notes.push({
-                      instrument: 1,
-                      program: 0,
+                    contSeq.notes.push({
                       pitch: 36 + root,
                       quantizedStartStep: i*STEPS_PER_PROG + j*STEPS_PER_CHORD,
-                      quantizedEndStep: i*STEPS_PER_PROG + (j+1)*STEPS_PER_CHORD
+                      quantizedEndStep: i*STEPS_PER_PROG + (j+1)*STEPS_PER_CHORD,
+                      instrument: 1
                     });
 
                     // Add Chords
                     mm.chords.ChordSymbols.pitches(chord).forEach((pitch, k)=>{
-                      seq.notes.push({
-                        instrument: 2,
-                        program: 0,
+                      contSeq.notes.push({
                         pitch: 48 + pitch,
                         quantizedStartStep: i*STEPS_PER_PROG + j*STEPS_PER_CHORD,
-                        quantizedEndStep: i*STEPS_PER_PROG + (j+1)*STEPS_PER_CHORD
+                        quantizedEndStep: i*STEPS_PER_PROG + (j+1)*STEPS_PER_CHORD,
+                        instrument: 2
                       });
                     })
 
@@ -66,11 +70,9 @@ const loop = ()=>{
                 }
 
                 // Set total sequence length.
-                seq.totalQuantizedSteps = STEPS_PER_PROG * NUM_REPS;
+                contSeq.totalQuantizedSteps = STEPS_PER_PROG;
+                seq = contSeq;
                 console.log(seq);
-                console.log(Tone.Transport.bpm.value);
-                Tone.Transport.start();
-                // play();
               }
 
 
@@ -78,33 +80,43 @@ const loop = ()=>{
           const generate = () => {
 
             // Prime with root note of the first chord.
-            seq = {
-              quantizationInfo: {stepsPerQuarter: STEPS_PER_QUARTER},
-              notes: [],
-              totalQuantizedSteps: 1
-            };
+            console.log("model start co generate")
 
-            model.continueSequence(seq, ( NUM_REPS * STEPS_PER_PROG ) - 1, 1, chords)
-              .then(updateSeq)
+            const model_promise = new Promise((resolve, reject) => {
+              model.continueSequence(seq, ( NUM_REPS * STEPS_PER_PROG ) - 1, 1, chords).then(updateSeq);
+            });
+
+            model_promise.then(()=>{})
+
+
           }
 
 
           const playSeq = (time) =>{
-            var stepsPerCycle = STEPS_PER_CHORD * chords.length;
-            var stepsPerSecond = Tone.Transport.bpm.value * STEPS_PER_QUARTER / 60;
-            var currentStep = Math.floor( time * stepsPerSecond ) % stepsPerCycle;
+            var currentStep = Math.floor( time * STEPS_PER_SECOND ) % STEPS_PER_PROG;
+
+            if(!seq.notes || currentStep==0){
+              generate();
+            }
+
             seq.notes.filter((note) => note.quantizedStartStep == currentStep)
                      .forEach((note) => {
+                       console.log(note);
                        let freq = Tone.Frequency(note.pitch, 'midi');
-                       let duration = (note.quantizedEndStep  - note.quantizedStartStep)  / stepsPerSecond;
+                       let duration = (note.quantizedEndStep  - note.quantizedStartStep)  / STEPS_PER_SECOND;
                        sampler.triggerAttackRelease(freq, duration);
                      })
-            console.log(currentStep);
           }
 
-          Tone.Transport.scheduleRepeat(playSeq, "8n");
+          model.initialize().then(()=>{
+            // Tone.Transport.scheduleRepeat((time)=>{
+            //   var anticipateGenerator = Tone.Draw.schedule(generate, time);
+            //   anticipateGenerator.anticipation = 5;
+            // }, STEPS_PER_PROG/STEPS_PER_SECOND);
 
-          model.initialize().then(generate);
+            Tone.Transport.scheduleRepeat(playSeq, "8n");
+            Tone.Transport.start();
+          });
 }
 
 export default loop;
