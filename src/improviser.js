@@ -1,5 +1,5 @@
 import * as mm from '@magenta/music';
-import {sampler, echoedSampler, bassSampler, bassLowSampler} from './samplers'
+import { sampler } from './samplers'
 import Tone from 'tone'
 
 const loop = ()=>{
@@ -14,13 +14,6 @@ const loop = ()=>{
           // Number of times to repeat chord progression.
           const NUM_REPS = 1;
           const model = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/chord_pitches_improv');
-          const init_model = async ({model}) => {
-            return await model.initialize();
-          }
-
-          const sfUrl = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
-          const player = new mm.SoundFontPlayer(sfUrl);
-          var playing;
 
           // Current chords being played.
           var chords = ["C", "Am", "F", "G"];
@@ -36,8 +29,10 @@ const loop = ()=>{
                 // Add the continuation to the original.
                 console.log("updating");
                 contSeq.notes.forEach((note) => {
-                  note.quantizedStartStep += seq.totalQuantizedSteps % STEPS_PER_PROG;
-                  note.quantizedEndStep += seq.totalQuantizedSteps % STEPS_PER_PROG;
+                  //note.quantizedStartStep += seq.totalQuantizedSteps % STEPS_PER_PROG;
+                  //note.quantizedEndStep += seq.totalQuantizedSteps % STEPS_PER_PROG;
+                  note.quantizedStartStep += 1;
+                  note.quantizedEndStep += 1;
                   note.instrument = 0;
                   //seq.notes.push(note);
                 });
@@ -72,7 +67,7 @@ const loop = ()=>{
                 // Set total sequence length.
                 contSeq.totalQuantizedSteps = STEPS_PER_PROG;
                 seq = contSeq;
-                console.log(seq);
+                // console.log(seq);
               }
 
 
@@ -81,12 +76,23 @@ const loop = ()=>{
 
             // Prime with root note of the first chord.
             console.log("model start co generate")
+            fetch('http://localhost:3001/')
+                .then(response => response.json())
+                .then(data => {
+                  data.totalQuantizedSteps = parseInt(data.totalQuantizedSteps);
+                  data.notes.forEach((note) =>{
+                    note.quantizedStartStep = parseInt(note.quantizedStartStep);
+                    note.quantizedEndStep = parseInt(note.quantizedEndStep);
+                  })
+                  console.log(data);
+                  updateSeq(data);
+                });
 
-            const model_promise = new Promise((resolve, reject) => {
-              model.continueSequence(seq, ( NUM_REPS * STEPS_PER_PROG ) - 1, 1, chords).then(updateSeq);
-            });
-
-            model_promise.then(()=>{})
+            // const model_promise = new Promise((resolve, reject) => {
+            //   model.continueSequence(seq, ( NUM_REPS * STEPS_PER_PROG ) - 1, 1, chords).then(updateSeq);
+            // });
+            //
+            // model_promise.then(()=>{})
 
 
           }
@@ -95,11 +101,11 @@ const loop = ()=>{
           const playSeq = (time) =>{
             var currentStep = Math.floor( time * STEPS_PER_SECOND ) % STEPS_PER_PROG;
 
-            if(!seq.notes || currentStep==0){
+            if(!seq.notes || currentStep === 0){
               generate();
             }
 
-            seq.notes.filter((note) => note.quantizedStartStep == currentStep)
+            seq.notes.filter((note) => note.quantizedStartStep === currentStep)
                      .forEach((note) => {
                        console.log(note);
                        let freq = Tone.Frequency(note.pitch, 'midi');
