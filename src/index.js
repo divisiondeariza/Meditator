@@ -4,6 +4,8 @@ import './index.css';
 import App from './App';
 import * as serviceWorker from './serviceWorker';
 import * as mm from '@magenta/music';
+import {sampler, echoedSampler, bassSampler, bassLowSampler} from './samplers'
+import Tone from 'tone'
 
 class Meditator extends React.Component {
   constructor(props) {
@@ -33,6 +35,7 @@ class Meditator extends React.Component {
     // Current chords being played.
     var currentChords = undefined;
     var seq;
+
 
     // Sample over chord progression.
     const generate = () => {
@@ -92,7 +95,9 @@ class Meditator extends React.Component {
           // Set total sequence length.
           seq.totalQuantizedSteps = STEPS_PER_PROG * NUM_REPS;
           console.log(seq);
-          play();
+          console.log(Tone.Transport.bpm.value);
+          Tone.Transport.start();
+          // play();
         })
         console.log("done");
 
@@ -113,7 +118,22 @@ class Meditator extends React.Component {
       playOnce();
     }
 
-     model.initialize().then(generate);
+    const playSeq = (time) =>{
+      var stepsPerCycle = STEPS_PER_CHORD * currentChords.length;
+      var stepsPerSecond = Tone.Transport.bpm.value * STEPS_PER_QUARTER / 60;
+      var currentStep = Math.floor( time * stepsPerSecond ) % stepsPerCycle;
+      seq.notes.filter((note) => note.quantizedStartStep == currentStep)
+               .forEach((note) => {
+                 let freq = Tone.Frequency(note.pitch, 'midi');
+                 let duration = (note.quantizedEndStep || stepsPerCycle  - note.quantizedStartStep)  / stepsPerSecond;
+                 sampler.triggerAttackRelease(freq, duration);
+               })
+      console.log(currentStep);
+    }
+
+    Tone.Transport.scheduleRepeat(playSeq, "8n");
+
+    model.initialize().then(generate);
 
 
 
