@@ -3,6 +3,7 @@ import { sampler } from './samplers'
 import Tone from 'tone'
 
 const loop = (drawCallback)=>{
+          console.log("loop started")
 
           // Number of steps to play each chord.
           const STEPS_PER_QUARTER = 2;
